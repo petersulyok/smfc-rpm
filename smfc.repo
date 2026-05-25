@@ -1,0 +1,7 @@
+[smfc]
+name=smfc RPM repository
+baseurl=https://petersulyok.github.io/smfc-rpm/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://petersulyok.github.io/smfc-rpm/smfc-repo.gpg
