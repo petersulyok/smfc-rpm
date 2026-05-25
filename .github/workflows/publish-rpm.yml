@@ -35,12 +35,7 @@ jobs:
         run: echo "$GPG_PRIVATE_KEY" | gpg --batch --import
 
       - name: Configure RPM signing macros
-        run: |
-          cat > ~/.rpmmacros << 'EOF'
-          %_gpg_name 9E06E863D50D7541
-          %__gpg /usr/bin/gpg
-          %__gpg_sign_cmd %{__gpg} --no-verbose --no-armor --batch --pinentry-mode loopback --no-secmem-warning -u "%{_gpg_name}" -sbo %{__signature_filename} --digest-algo sha256 %{__plaintext_filename}
-          EOF
+        run: echo "%_gpg_name 9E06E863D50D7541" > ~/.rpmmacros
 
       - name: Resolve release tag
         id: tag
