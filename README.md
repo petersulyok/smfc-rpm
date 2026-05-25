@@ -6,12 +6,14 @@ This repository hosts the RPM packages for [smfc](https://github.com/petersulyok
 
 Requires Python ≥ 3.10. Supported on:
 
-| Distribution | Version |
-|---|---|
-| Fedora | 39, 40, 41, 42, 43 |
-| RHEL / Rocky / AlmaLinux | 9, 10 |
-| CentOS Stream | 9, 10 |
-| openSUSE | Leap 15.5+, Tumbleweed |
+| Distribution  | Version                |
+|---------------|------------------------|
+| Fedora        | 39+                    |
+| RHEL          | 9+ (with EPEL)         |
+| CentOS Stream | 9+ (with EPEL)         |
+| Rocky Linux   | 9+ (with EPEL)         |
+| AlmaLinux     | 9+ (with EPEL)         |
+| openSUSE      | Leap 15.5+, Tumbleweed |
 
 ## Installation
 
