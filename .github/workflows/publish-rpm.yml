@@ -6,69 +6,194 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "smfc release tag"
-        required: true
+        description: "smfc release tag (empty = latest upstream release)"
+        required: false
+  schedule:
+    # Poll for new releases every 12 hours
+    - cron: "17 */12 * * *"
+
+concurrency:
+  group: publish-rpm
+  cancel-in-progress: false
 
 jobs:
+  resolve:
+    name: Resolve release tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.value }}
+      publish: ${{ steps.check.outputs.publish }}
+    steps:
+      - name: Resolve release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ github.event.client_payload.release_tag || inputs.release_tag }}
+        run: |
+          tag="$REQUESTED_TAG"
+          if [ -z "$tag" ]; then
+            tag=$(gh release view -R petersulyok/smfc --json tagName --jq .tagName)
+          fi
+          echo "Release tag: $tag"
+          echo "value=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the release is already published
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          publish=true
+          # Scheduled runs skip releases that are already on gh-pages; manual and
+          # dispatched runs always (re)publish the requested tag.
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            version="${TAG#v}"
+            if gh api "repos/$GITHUB_REPOSITORY/contents/el10/packages?ref=gh-pages" --jq '.[].name' 2>/dev/null \
+                | grep -q "^smfc-${version}-"; then
+              echo "$TAG is already published, nothing to do."
+              publish=false
+            fi
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+  build-el:
+    name: Build RPM package (${{ matrix.dist }})
+    needs: resolve
+    if: needs.resolve.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - dist: el10
+            image: almalinux:10
+    container: ${{ matrix.image }}
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf install -y 'dnf-command(config-manager)'
+          dnf config-manager --set-enabled crb
+          dnf install -y git rpm-build python3-devel python3-setuptools python3-pip python3-wheel pyproject-rpm-macros systemd-rpm-macros
+
+      - name: Checkout smfc at the release tag
+        uses: actions/checkout@v4
+        with:
+          repository: petersulyok/smfc
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Get version
+        run: echo "VERSION=$(grep '^Version:' smfc.spec | awk '{print $2}')" >> "$GITHUB_ENV"
+
+      - name: Adapt project metadata for the distribution's setuptools
+        # rewrite PEP 639 license metadata for setuptools 69
+        run: |
+          sed -i -e 's/^license = "\(.*\)"$/license = {text = "\1"}/' -e '/^license-files/d' pyproject.toml
+          grep -q 'license = {text' pyproject.toml
+
+      - name: Create source tarball
+        run: |
+          mkdir -p ~/rpmbuild/SOURCES
+          tar czf ~/rpmbuild/SOURCES/smfc-"${VERSION}".tar.gz --transform="s,^./,smfc-${VERSION}/," --exclude='.git' --exclude='.venv' .
+
+      - name: Build RPM package
+        run: rpmbuild -bb smfc.spec
+
+      - name: Check the built package
+        run: |
+          rpm -qp --requires ~/rpmbuild/RPMS/noarch/smfc-*.rpm
+          dnf install -y ~/rpmbuild/RPMS/noarch/smfc-*.rpm
+          smfc -v
+
+      - name: Upload RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: smfc-${{ env.VERSION }}-${{ matrix.dist }}
+          path: ~/rpmbuild/RPMS/noarch/smfc-*.rpm
+
   publish:
+    needs: [resolve, build-el]
+    if: needs.resolve.outputs.publish == 'true'
     runs-on: ubuntu-latest
     container: fedora:latest
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
 
     steps:
       - name: Install dependencies
         run: dnf install -y createrepo_c rpm-sign gnupg2 git gh
 
-      - name: Checkout gh-pages
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: gh-pages
           fetch-depth: 0
 
-      - name: Mark workspace as safe for git
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Switch to gh-pages (create it if it does not exist yet)
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
+            git checkout -B gh-pages origin/gh-pages
+          else
+            echo "No gh-pages branch yet, creating an empty one."
+            git checkout --orphan gh-pages
+            git rm -rf -q .
+          fi
 
       - name: Import signing key
         env:
           GPG_PRIVATE_KEY: ${{ secrets.REPO_SIGNING_GPG_KEY }}
-        run: echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::error::Secret REPO_SIGNING_GPG_KEY is not set. See README for how to create it."
+            exit 1
+          fi
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          key_id=$(gpg --batch --list-secret-keys --with-colons | awk -F: '$1 == "sec" { print $5; exit }')
+          echo "Signing with key $key_id"
+          echo "%_gpg_name $key_id" > ~/.rpmmacros
+          echo "GPG_KEY_ID=$key_id" >> "$GITHUB_ENV"
 
-      - name: Configure RPM signing macros
-        run: echo "%_gpg_name 9E06E863D50D7541" > ~/.rpmmacros
-
-      - name: Resolve release tag
-        id: tag
-        run: echo "value=${{ github.event.client_payload.release_tag || inputs.release_tag }}" >> $GITHUB_OUTPUT
-
-      - name: Download .rpm from release
+      - name: Download Fedora .rpm from release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p /tmp/in
-          gh release download "${{ steps.tag.outputs.value }}" -R petersulyok/smfc -p '*.rpm' -D /tmp/in
+          gh release download "$RELEASE_TAG" -R petersulyok/smfc -p '*.rpm' -D /tmp/in
 
-      - name: Bootstrap gh-pages content
+      - name: Download EL .rpm build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: smfc-*-el*
+          path: /tmp/el
+
+      - name: Generate gh-pages content
         run: |
-          if [ ! -f smfc-repo.gpg ]; then
-            git show origin/main:smfc-repo.gpg > smfc-repo.gpg
-          fi
-          if [ ! -f smfc.repo ]; then
-            git show origin/main:smfc.repo > smfc.repo
-          fi
-          mkdir -p packages
+          owner=$(echo "${GITHUB_REPOSITORY%/*}" | tr '[:upper:]' '[:lower:]')
+          repo="${GITHUB_REPOSITORY#*/}"
+          pages_url="https://${owner}.github.io/${repo}"
+          echo "Repository URL: $pages_url"
+          for f in smfc.repo smfc-el.repo; do
+            git show "origin/main:$f" | sed "s|https://petersulyok.github.io/smfc-rpm|${pages_url}|g" > "$f"
+          done
+          gpg --batch --armor --export "$GPG_KEY_ID" > smfc-repo.gpg
+          mkdir -p packages el10/packages
 
-      - name: Sign and add package to repository
+      - name: Sign and add packages to repositories
         run: |
           cp /tmp/in/*.rpm packages/
-          rpm --addsign packages/*.rpm
-          createrepo_c --update .
+          cp /tmp/el/smfc-*-el10/*.rpm el10/packages/
+          rpm --addsign packages/*.rpm el10/packages/*.rpm
+          ls packages/*.rpm > /tmp/root-pkglist
+          createrepo_c --update --pkglist /tmp/root-pkglist .
+          createrepo_c --update el10
           gpg --batch --yes --detach-sign --armor repodata/repomd.xml
+          gpg --batch --yes --detach-sign --armor el10/repodata/repomd.xml
 
       - name: Commit and push gh-pages
         run: |
           git config user.name "smfc-bot"
           git config user.email "smfc-bot@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet || git commit -m "Publish ${{ steps.tag.outputs.value }}"
+          git diff --cached --quiet || git commit -m "Publish $RELEASE_TAG"
           git push origin gh-pages

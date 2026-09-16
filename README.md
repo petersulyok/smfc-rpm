@@ -6,14 +6,14 @@ This repository hosts the RPM packages for [smfc](https://github.com/petersulyok
 
 Requires Python ≥ 3.10. Supported on:
 
-| Distribution  | Version                |
-|---------------|------------------------|
-| Fedora        | 39+                    |
-| RHEL          | 9+ (with EPEL)         |
-| CentOS Stream | 9+ (with EPEL)         |
-| Rocky Linux   | 9+ (with EPEL)         |
-| AlmaLinux     | 9+ (with EPEL)         |
-| openSUSE      | Leap 15.5+, Tumbleweed |
+| Distribution  | Version                | Repository file |
+|---------------|------------------------|-----------------|
+| Fedora        | 39+                    | smfc.repo       |
+| RHEL          | 10+                    | smfc-el.repo    |
+| CentOS Stream | 10+                    | smfc-el.repo    |
+| Rocky Linux   | 10+                    | smfc-el.repo    |
+| AlmaLinux     | 10+                    | smfc-el.repo    |
+| openSUSE      | Leap 15.5+, Tumbleweed | smfc.repo       |
 
 ## Installation
 
@@ -22,7 +22,11 @@ sudo dnf config-manager addrepo --from-repofile=https://petersulyok.github.io/sm
 sudo dnf install smfc
 ```
 
-(On older `dnf` versions: `sudo dnf config-manager --add-repo=https://petersulyok.github.io/smfc-rpm/smfc.repo`.)
+For older `dnf` versions or Enterprise Linux:
+```bash
+sudo dnf config-manager --add-repo=https://petersulyok.github.io/smfc-rpm/smfc.repo # or smfc-el.repo
+sudo dnf install smfc
+```
 
 ## Updating
 
@@ -34,5 +38,5 @@ sudo dnf upgrade smfc
 
 ```bash
 sudo dnf remove smfc
-sudo rm /etc/yum.repos.d/smfc.repo
+sudo rm /etc/yum.repos.d/smfc.repo    # or smfc-el.repo
 ```
