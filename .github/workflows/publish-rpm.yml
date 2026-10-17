@@ -21,7 +21,7 @@ jobs:
         run: dnf install -y createrepo_c rpm-sign gnupg2 git gh
 
       - name: Checkout gh-pages
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: gh-pages
           fetch-depth: 0
