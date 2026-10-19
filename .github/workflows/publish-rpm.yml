@@ -48,21 +48,58 @@ jobs:
           mkdir -p /tmp/in
           gh release download "${{ steps.tag.outputs.value }}" -R petersulyok/smfc -p '*.rpm' -D /tmp/in
 
-      - name: Bootstrap gh-pages content
+      - name: Copy repository files from workflow commit
         run: |
-          if [ ! -f smfc-repo.gpg ]; then
-            git show origin/main:smfc-repo.gpg > smfc-repo.gpg
-          fi
-          if [ ! -f smfc.repo ]; then
-            git show origin/main:smfc.repo > smfc.repo
-          fi
-          mkdir -p packages
+          for f in smfc.repo smfc-el.repo smfc-repo.gpg; do
+            git show "${{ github.sha }}:$f" > "$f"
+          done
 
-      - name: Sign and add package to repository
+      - name: Sign packages
+        run: rpm --addsign /tmp/in/*.rpm
+
+      # Transition period: a new Fedora tree gets the earlier RPMs of its dist tag from the root tree.
+      # Remove this step at the end of the transition.
+      - name: Fill new Fedora trees from root tree
         run: |
-          cp /tmp/in/*.rpm packages/
-          rpm --addsign packages/*.rpm
-          createrepo_c --update .
+          for rpm in /tmp/in/*.fc[0-9]*.noarch.rpm; do
+            release=$(rpm -qp --qf '%{RELEASE}' "$rpm")
+            dist=${release##*.}
+            tree="fedora/${dist#fc}"
+            if [ ! -d "$tree" ] && ls packages/*."$dist".noarch.rpm > /dev/null 2>&1; then
+              mkdir -p "$tree"
+              cp packages/*."$dist".noarch.rpm "$tree/"
+            fi
+          done
+
+      - name: Add packages to their trees
+        run: |
+          : > /tmp/trees
+          for rpm in /tmp/in/*.rpm; do
+            release=$(rpm -qp --qf '%{RELEASE}' "$rpm")
+            dist=${release##*.}
+            case "$dist" in
+              fc[0-9]*) tree="fedora/${dist#fc}" ;;
+              el[0-9]*) tree="$dist" ;;
+              *) echo "::error::Unknown dist tag '$dist' in $(basename "$rpm")"; exit 1 ;;
+            esac
+            mkdir -p "$tree"
+            cp "$rpm" "$tree/"
+            echo "$tree" >> /tmp/trees
+          done
+          for tree in $(sort -u /tmp/trees); do
+            createrepo_c --update "$tree"
+            gpg --batch --yes --detach-sign --armor "$tree/repodata/repomd.xml"
+          done
+
+      # Transition period: the root tree serves the old smfc.repo files with the newest Fedora RPM.
+      # Remove this step at the end of the transition, and delete packages/ and repodata/ from gh-pages.
+      - name: Update root tree for old smfc.repo files
+        run: |
+          newest=$(ls /tmp/in/*.fc[0-9]*.noarch.rpm | sort -V | tail -n 1)
+          mkdir -p packages
+          cp "$newest" packages/
+          ls packages/*.rpm > /tmp/root-pkglist
+          createrepo_c --update --pkglist /tmp/root-pkglist .
           gpg --batch --yes --detach-sign --armor repodata/repomd.xml
 
       - name: Commit and push gh-pages
