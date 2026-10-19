@@ -1,6 +1,6 @@
 [smfc]
-name=smfc RPM repository
-baseurl=https://petersulyok.github.io/smfc-rpm/
+name=smfc RPM repository (Fedora $releasever)
+baseurl=https://petersulyok.github.io/smfc-rpm/fedora/$releasever/
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
