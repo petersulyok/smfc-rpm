@@ -6,14 +6,14 @@ This repository hosts the RPM packages for [smfc](https://github.com/petersulyok
 
 Requires Python ≥ 3.11. Supported on:
 
-| Distribution  | Version        | Package          | `.repo` file   |
-|---------------|----------------|------------------|----------------|
-| Fedora        | 43, 44         | `.fc43`, `.fc44` | `smfc.repo`    |
-| RHEL          | 10 (with EPEL) | `.el10`          | `smfc-el.repo` |
-| AlmaLinux     | 10 (with EPEL) | `.el10`          | `smfc-el.repo` |
-| Rocky Linux   | 10 (with EPEL) | `.el10`          | `smfc-el.repo` |
-| CentOS Stream | 10 (with EPEL) | `.el10`          | `smfc-el.repo` |
-| Oracle Linux  | 10 (with EPEL) | `.el10`          | `smfc-el.repo` |
+| Distribution  | Version | Package          | `.repo` file   |
+|---------------|---------|------------------|----------------|
+| Fedora        | 43, 44  | `.fc43`, `.fc44` | `smfc.repo`    |
+| RHEL          | 10      | `.el10`          | `smfc-el.repo` |
+| AlmaLinux     | 10      | `.el10`          | `smfc-el.repo` |
+| Rocky Linux   | 10      | `.el10`          | `smfc-el.repo` |
+| CentOS Stream | 10      | `.el10`          | `smfc-el.repo` |
+| Oracle Linux  | 10      | `.el10`          | `smfc-el.repo` |
 
 Each Fedora release has its own package, built for its Python version. The supported Fedora releases change with
 the Fedora release cycle. One `.el10` package serves all Enterprise Linux 10 distributions.
@@ -36,17 +36,13 @@ sudo dnf install smfc
 
 ### Enterprise Linux 10
 
-The `python3-pyudev` dependency comes from [EPEL](https://docs.fedoraproject.org/en-US/epel/getting-started/), so
-enable EPEL first:
-
 ```bash
-sudo dnf install epel-release
 sudo dnf config-manager --add-repo https://petersulyok.github.io/smfc-rpm/smfc-el.repo
 sudo dnf install smfc
 ```
 
-On RHEL and Oracle Linux, the `epel-release` package is not available under this name; enable EPEL as described in
-the [EPEL documentation](https://docs.fedoraproject.org/en-US/epel/getting-started/).
+The `python3-pyudev` dependency is in the BaseOS repository of Enterprise Linux 10, so EPEL is not required.
+`dnf config-manager` comes from the `dnf-plugins-core` package.
 
 ### Repository signing key
 
