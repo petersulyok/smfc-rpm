@@ -2,6 +2,16 @@
 
 This repository hosts the RPM packages for [smfc](https://github.com/petersulyok/smfc) — a fan controller for SuperMicro (home) servers.
 
+> [!WARNING]
+> **Existing Fedora users: replace your `smfc.repo` file.** From smfc v6.5.0, this repository has a separate tree
+> for each distribution. If `/etc/yum.repos.d/smfc.repo` contains `baseurl=https://petersulyok.github.io/smfc-rpm/`
+> (without `fedora/`), it points to the old repository. The old repository has v6.5.0 as its last version, and it
+> will be removed with the next smfc release. Then `dnf` reports an error for it. Replace the file with the current
+> one:
+> ```bash
+> sudo dnf config-manager addrepo --overwrite --from-repofile=https://petersulyok.github.io/smfc-rpm/smfc.repo
+> ```
+
 ## Compatible distributions
 
 Requires Python ≥ 3.11. Supported on:
@@ -51,15 +61,6 @@ The packages and the repository metadata are signed. On the first installation, 
 
 ```
 6912 A339 7CF9 7359 857A  B82F 9E06 E863 D50D 7541
-```
-
-### Old `smfc.repo` on Fedora
-
-If `/etc/yum.repos.d/smfc.repo` contains `baseurl=https://petersulyok.github.io/smfc-rpm/` (without `fedora/`), it
-points to the old repository, which receives updates only for a limited time. Replace the file with the current one:
-
-```bash
-sudo dnf config-manager addrepo --overwrite --from-repofile=https://petersulyok.github.io/smfc-rpm/smfc.repo
 ```
 
 ## Updating
